@@ -1,65 +1,129 @@
-import Image from "next/image";
+"use client"
+import React, { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Navbar from './components/Navbar'
 
 export default function Home() {
+  const router = useRouter()
+  const [selectedTable, setSelectedTable] = useState(null)
+
+  // Based on your sketch: 6 Tables
+  // Tables 1,2,3 are Left Column. Tables 4,5,6 are Right Column.
+  const tables = [
+    { id: 1, label: "01", status: "available" },
+    { id: 4, label: "04", status: "occupied" }, // Top Right
+    { id: 2, label: "02", status: "available" },
+    { id: 5, label: "05", status: "available" }, // Middle Right
+    { id: 3, label: "03", status: "available" },
+    { id: 6, label: "06", status: "available" }, // Bottom Right
+  ]
+
+  const handleTableClick = (table) => {
+    if (table.status === "occupied") {
+        alert("Table is occupied.");
+        return;
+    }
+    setSelectedTable(selectedTable === table.id ? null : table.id);
+  }
+
+  const handleProceed = () => {
+    if (selectedTable) {
+        router.push(`/menu?table=${selectedTable}`);
+    }
+  }
+
+  // Helper to render the "Chair-Table-Chair" shape
+  const renderTableUnit = (table) => {
+    const isOccupied = table.status === "occupied";
+    const isSelected = selectedTable === table.id;
+
+    // Dynamic Colors based on status
+    const tableColor = isOccupied 
+        ? "bg-slate-200 border-slate-300 opacity-60" // Occupied (Gray)
+        : isSelected 
+            ? "bg-amber-500 border-amber-600 shadow-lg shadow-amber-500/40" // Selected (Gold)
+            : "bg-white border-slate-800 hover:border-amber-400"; // Available (White with dark border like sketch)
+
+    const chairColor = isOccupied 
+        ? "bg-slate-200 border-slate-300" 
+        : isSelected 
+            ? "bg-amber-600 border-amber-700" 
+            : "bg-white border-slate-800";
+    
+    // Text Color
+    const textColor = isSelected ? "text-white" : "text-slate-800";
+
+    return (
+      <div 
+        key={table.id} 
+        onClick={() => handleTableClick(table)}
+        className="flex items-center justify-center gap-2 cursor-pointer transition-all duration-200 active:scale-95"
+      >
+        {/* Left Chair */}
+        <div className={`w-3 h-12 border-2 rounded-sm ${chairColor}`}></div>
+
+        {/* The Table Surface */}
+        <div className={`w-28 h-28 border-2 rounded-lg flex flex-col items-center justify-center relative shadow-sm transition-all duration-300 ${tableColor}`}>
+            <span className={`text-2xl font-bold ${textColor}`}>{table.label}</span>
+            
+            {/* Status Text (Small) */}
+            <span className={`text-[9px] uppercase font-bold mt-1 tracking-wider ${isSelected ? "text-amber-100" : "text-slate-400"}`}>
+                {isOccupied ? "Busy" : "Free"}
+            </span>
+        </div>
+
+        {/* Right Chair */}
+        <div className={`w-3 h-12 border-2 rounded-sm ${chairColor}`}></div>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.js file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-32">
+      <Navbar isLoggedIn={false} current="Home" />
+
+      {/* Hero Text */}
+      <div className="text-center pt-8 pb-4">
+        <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Select Your Table</h1>
+        <p className="text-slate-500 text-sm">Tap a table to view the menu</p>
+      </div>
+
+      {/* THE FLOOR PLAN CONTAINER */}
+      <div className="max-w-md mx-auto px-6 py-6">
+        
+        {/* 1. THE COUNTER (Top of sketch) */}
+        <div className="w-full h-16 border-2 border-slate-800 bg-slate-100 dark:bg-slate-900 rounded-lg flex items-center justify-center mb-12 shadow-sm">
+            <span className="text-slate-500 font-bold tracking-widest uppercase text-sm">
+                Counter & Kitchen
+            </span>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* 2. THE TABLES (Grid Layout like sketch) */}
+        {/* grid-cols-2 creates the Left/Right split */}
+        <div className="grid grid-cols-2 gap-y-12 gap-x-4 justify-items-center">
+            {tables.map(table => renderTableUnit(table))}
         </div>
-      </main>
+
+      </div>
+
+      {/* STICKY BOTTOM ACTION BAR */}
+      <div className="fixed bottom-0 left-0 w-full p-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 z-40">
+        <div className="max-w-md mx-auto">
+            <button 
+                onClick={handleProceed}
+                disabled={!selectedTable}
+                className={`
+                    w-full py-4 rounded-xl text-lg font-bold transition-all shadow-xl
+                    ${selectedTable 
+                        ? "bg-amber-600 hover:bg-amber-700 text-white translate-y-0" 
+                        : "bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
+                    }
+                `}
+            >
+                {selectedTable ? `Confirm Table ${selectedTable}` : "Select a Table"}
+            </button>
+        </div>
+      </div>
     </div>
-  );
+  )
 }
