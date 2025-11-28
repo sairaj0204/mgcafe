@@ -1,21 +1,19 @@
 "use client"
-import React, { useState } from 'react'
+import React, { useState, Suspense } from 'react' // 1. Import Suspense
 import { useRouter, useSearchParams } from 'next/navigation'
 import Navbar from '../components/Navbar'
 import { useCart } from '@/context/CartContext'
 
-export default function CheckoutPage() {
+// 2. Rename your main logic function to "CheckoutContent"
+function CheckoutContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const tableNumber = searchParams.get('table') || "?"
   
-  // 1. Get Global Cart & Actions
   const { cart, clearCart } = useCart() 
-
   const [note, setNote] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
 
-  // --- MOCK MENU DATA (Must match Menu Page) ---
   const MENU_ITEMS = [
     { id: 1, name: "Cappuccino", price: 140 },
     { id: 2, name: "Masala Chai", price: 40 },
@@ -25,38 +23,26 @@ export default function CheckoutPage() {
     { id: 6, name: "French Fries", price: 90 },
   ]
 
-  // 2. Process Cart Items
   const cartItems = Object.keys(cart).map(id => {
     const item = MENU_ITEMS.find(i => i.id === parseInt(id))
     if (!item) return null
     return { ...item, qty: cart[id] }
   }).filter(item => item !== null)
 
-  // 3. Calculate Totals
   const itemTotal = cartItems.reduce((sum, item) => sum + (item.price * item.qty), 0)
-  const tax = "Included"
-  const grandTotal = itemTotal
+  const tax = Math.round(itemTotal * 0.05)
+  const grandTotal = itemTotal + tax
 
-  // 4. Handle Payment Logic
   const handlePayment = async () => {
     setIsProcessing(true)
-    
-    // Simulate API Call to Razorpay/Backend
     setTimeout(() => {
-        // Success!
         alert(`Payment of ₹${grandTotal} Successful!\nOrder placed for Table ${tableNumber}.`)
-        
-        // CRITICAL: Clear the cart from memory
         clearCart()
-        
         setIsProcessing(false)
-        
-        // Redirect to Home (or an Order Success page)
         router.push("/") 
     }, 2000)
   }
 
-  // 5. Empty Cart View
   if (cartItems.length === 0) {
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-4">
@@ -76,7 +62,6 @@ export default function CheckoutPage() {
     )
   }
 
-  // 6. Main Checkout View
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-40">
       <Navbar isLoggedIn={false} current="Menu" />
@@ -85,7 +70,6 @@ export default function CheckoutPage() {
         <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-1">Checkout</h1>
         <p className="text-sm text-slate-500 mb-6 font-medium">Ordering for Table {tableNumber}</p>
 
-        {/* ORDER SUMMARY CARD */}
         <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden mb-6">
             <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
                 <h3 className="font-bold text-slate-700 dark:text-slate-200">Order Summary</h3>
@@ -108,7 +92,6 @@ export default function CheckoutPage() {
                 ))}
             </div>
 
-            {/* Kitchen Note Input */}
             <div className="p-4 pt-0 border-t border-dashed border-slate-100 dark:border-slate-800 mt-2">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block mt-4">Cooking Instructions</label>
                 <input 
@@ -121,7 +104,6 @@ export default function CheckoutPage() {
             </div>
         </div>
 
-        {/* BILL DETAILS */}
         <div className="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-slate-100 dark:border-slate-800">
              <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400 mb-2">
                 <span>Item Total</span>
@@ -129,7 +111,7 @@ export default function CheckoutPage() {
              </div>
              <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400 mb-2">
                 <span>GST (5%)</span>
-                <span>{tax}</span>
+                <span>₹{tax}</span>
              </div>
              <div className="border-t border-dashed border-slate-200 dark:border-slate-700 my-3"></div>
              <div className="flex justify-between text-lg font-bold text-slate-900 dark:text-white">
@@ -139,7 +121,6 @@ export default function CheckoutPage() {
         </div>
       </div>
 
-      {/* STICKY PAYMENT BAR */}
       <div className="fixed bottom-0 left-0 w-full p-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 z-40 animate-slide-up">
         <div className="max-w-md mx-auto">
             <button 
@@ -158,7 +139,16 @@ export default function CheckoutPage() {
             </button>
         </div>
       </div>
-
     </div>
+  )
+}
+
+// 3. Create the Main Component with the Suspense Boundary
+export default function CheckoutPage() {
+  return (
+    // This <Suspense> block solves the error
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading Checkout...</div>}>
+      <CheckoutContent />
+    </Suspense>
   )
 }
