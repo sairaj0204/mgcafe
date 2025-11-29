@@ -1,21 +1,31 @@
 "use client"
 import React, { useState, useEffect } from 'react'
-import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useTheme } from "next-themes"
+import { useCart } from '@/context/CartContext'
 
 function Navbar({ isLoggedIn, current }) {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
+  const { clearCart } = useCart()
+  
   const [mounted, setMounted] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [userRole, setUserRole] = useState("user") // Default to user
 
-  // Prevent hydration mismatch
+  // 1. Hydration & Role Check
   useEffect(() => {
     setMounted(true)
+    
+    // Check role from LocalStorage
+    const userStr = localStorage.getItem("mg_user")
+    if (userStr) {
+        const user = JSON.parse(userStr)
+        setUserRole(user.role || "user")
+    }
   }, [])
 
-  // Lock body scroll when mobile menu is open
+  // Lock body scroll logic
   useEffect(() => {
     if (isMobileMenuOpen) {
       document.body.style.overflow = 'hidden'
@@ -24,7 +34,21 @@ function Navbar({ isLoggedIn, current }) {
     }
   }, [isMobileMenuOpen])
 
-  // Helper for Desktop "Pill" Links
+  // 2. Define Links based on Role
+  const navLinks = userRole === "admin" 
+    ? ["Home", "Menu", "Admin", "admin/Reports"]
+    : ["Home", "Menu"];
+
+  // 3. Logout Logic
+  const handleLogout = () => {
+    if(confirm("Are you sure you want to logout?")) {
+        localStorage.removeItem("mg_user");
+        clearCart();
+        router.replace("/login");
+    }
+  }
+
+  // Helper styles
   const getNavItemClass = (name) => {
     const isActive = current === name;
     return `
@@ -38,7 +62,6 @@ function Navbar({ isLoggedIn, current }) {
     `;
   };
 
-  // Helper for Mobile "List" Links
   const getMobileNavItemClass = (name) => {
     const isActive = current === name;
     return `
@@ -51,6 +74,12 @@ function Navbar({ isLoggedIn, current }) {
     `;
   };
 
+  const handleNavClick = (item) => {
+    // Handle special path logic if needed, otherwise default
+    const path = item === "Home" ? "/" : `/${item.toLowerCase().replace(" ", "")}`;
+    router.push(path);
+  }
+
   const handleMobileNav = (path) => {
     router.push(path);
     setIsMobileMenuOpen(false);
@@ -60,7 +89,7 @@ function Navbar({ isLoggedIn, current }) {
     <>
       <div className="flex justify-between items-center px-6 py-5 bg-white/70 dark:bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50 border-b border-slate-100 dark:border-slate-800 transition-all duration-300">
         
-        {/* 1. Logo */}
+        {/* Logo */}
         <h1 
           className="text-2xl font-bold text-slate-900 dark:text-white tracking-tighter cursor-pointer z-50"
           onClick={() => router.push("/")}
@@ -68,12 +97,12 @@ function Navbar({ isLoggedIn, current }) {
           MG<span className="text-amber-600 italic font-serif">Cafe.</span>
         </h1>
 
-        {/* 2. DESKTOP Navigation (Hidden on Mobile) */}
+        {/* DESKTOP LINKS (Dynamic based on Role) */}
         <ul className="hidden md:flex gap-2 bg-white/50 dark:bg-slate-900/50 p-1 rounded-full border border-slate-100 dark:border-slate-800 shadow-sm">
-          {["Home", "Menu", "Book Table", "Admin"].map((item) => (
+          {navLinks.map((item) => (
              <li 
                 key={item} 
-                onClick={() => router.push(item === "Home" ? "/" : `/${item.toLowerCase().replace(" ", "")}`)} 
+                onClick={() => handleNavClick(item)} 
                 className={getNavItemClass(item)}
              >
                 {item}
@@ -81,7 +110,7 @@ function Navbar({ isLoggedIn, current }) {
           ))}
         </ul>
 
-        {/* 3. Right Section: Toggle + Auth + Mobile Menu Button */}
+        {/* RIGHT SECTION */}
         <div className="flex gap-4 items-center z-50">
           
           {/* Theme Toggle */}
@@ -94,31 +123,35 @@ function Navbar({ isLoggedIn, current }) {
             </button>
           )}
 
-          {/* Desktop Auth (Hidden on Mobile) */}
+          {/* DESKTOP AUTH BUTTON (Replaces Image) */}
           <div className="hidden md:block">
             {isLoggedIn ? (
-               <div className="h-10 w-10 relative rounded-full border border-slate-200 dark:border-slate-700 overflow-hidden">
-                 <Image src="/vercel.svg" alt="Profile" fill className="object-cover" />
-               </div>
+               <button 
+                 onClick={handleLogout}
+                 className="bg-red-50 text-red-600 border border-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900/50 px-5 py-2 rounded-full text-sm font-bold hover:bg-red-100 transition-colors"
+               >
+                 Logout
+               </button>
             ) : (
-               <button className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-5 py-2 rounded-full text-sm font-bold">
+               <button 
+                 onClick={() => router.push('/login')}
+                 className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-5 py-2 rounded-full text-sm font-bold shadow-lg hover:-translate-y-0.5 transition-all"
+               >
                  Login
                </button>
             )}
           </div>
 
-          {/* MOBILE HAMBURGER BUTTON (Visible only on Mobile) */}
+          {/* MOBILE HAMBURGER */}
           <button 
             className="md:hidden p-2 text-slate-800 dark:text-white"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           >
             {isMobileMenuOpen ? (
-              // Close Icon (X)
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-7 h-7">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             ) : (
-              // Hamburger Icon
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-7 h-7">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
               </svg>
@@ -127,22 +160,36 @@ function Navbar({ isLoggedIn, current }) {
         </div>
       </div>
 
-      {/* 4. MOBILE FULLSCREEN MENU OVERLAY */}
-      {/* This renders outside the navbar container to cover the whole screen */}
+      {/* MOBILE MENU */}
       <div className={`
         fixed inset-0 z-40 bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl transition-transform duration-500 ease-in-out md:hidden flex flex-col items-center justify-center gap-8
         ${isMobileMenuOpen ? "translate-x-0" : "translate-x-full"}
       `}>
         <ul className="flex flex-col items-center w-full px-10">
-          <li onClick={() => handleMobileNav("/")} className={getMobileNavItemClass("Home")}>Home</li>
-          <li onClick={() => handleMobileNav("/menu")} className={getMobileNavItemClass("Menu")}>Menu</li>
-          <li onClick={() => handleMobileNav("/book")} className={getMobileNavItemClass("Book Table")}>Book Table</li>
-          <li onClick={() => handleMobileNav("/admin")} className={getMobileNavItemClass("Admin")}>Admin</li>
+          {navLinks.map((item) => (
+             <li 
+                key={item} 
+                onClick={() => handleMobileNav(item === "Home" ? "/" : `/${item.toLowerCase().replace(" ", "")}`)} 
+                className={getMobileNavItemClass(item)}
+             >
+                {item}
+             </li>
+          ))}
         </ul>
 
-        {/* Mobile Auth Button */}
-        {!isLoggedIn && (
-           <button className="bg-amber-500 text-white px-10 py-4 rounded-full text-xl font-bold shadow-xl shadow-amber-500/20">
+        {/* MOBILE AUTH BUTTON */}
+        {isLoggedIn ? (
+           <button 
+             onClick={() => { setIsMobileMenuOpen(false); handleLogout(); }}
+             className="text-red-500 font-bold text-xl px-10 py-4 border-2 border-red-100 rounded-full"
+           >
+             Log Out
+           </button>
+        ) : (
+           <button 
+             onClick={() => { setIsMobileMenuOpen(false); router.push('/login'); }}
+             className="bg-amber-500 text-white px-10 py-4 rounded-full text-xl font-bold shadow-xl shadow-amber-500/20"
+           >
              Login / Sign Up
            </button>
         )}

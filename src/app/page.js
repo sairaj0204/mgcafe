@@ -1,29 +1,48 @@
 "use client"
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Navbar from './components/Navbar'
 
 export default function Home() {
   const router = useRouter()
+  const [tables, setTables] = useState([])
   const [selectedTable, setSelectedTable] = useState(null)
+  const [isAuthorized, setIsAuthorized] = useState(false)
+  const [loading, setLoading] = useState(true)
 
-  // Based on your sketch: 6 Tables
-  // Tables 1,2,3 are Left Column. Tables 4,5,6 are Right Column.
-  const tables = [
-    { id: 1, label: "01", status: "available" },
-    { id: 4, label: "04", status: "occupied" }, // Top Right
-    { id: 2, label: "02", status: "available" },
-    { id: 5, label: "05", status: "available" }, // Middle Right
-    { id: 3, label: "03", status: "available" },
-    { id: 6, label: "06", status: "available" }, // Bottom Right
-  ]
+  // 1. AUTH & DATA FETCHING
+  useEffect(() => {
+    // A. Check Auth
+    const user = localStorage.getItem("mg_user")
+    if (!user) {
+      router.push("/login")
+      return
+    }
+    setIsAuthorized(true)
+
+    // B. Fetch Tables
+    const fetchTables = async () => {
+        try {
+            const res = await fetch('/api/tables');
+            if(res.ok) {
+                const data = await res.json();
+                setTables(data);
+            }
+        } catch(e) { console.error(e); } finally { setLoading(false); }
+    }
+
+    fetchTables();
+    // Poll every 10s to see if tables free up
+    const interval = setInterval(fetchTables, 10000);
+    return () => clearInterval(interval);
+  }, [router])
 
   const handleTableClick = (table) => {
     if (table.status === "occupied") {
-        alert("Table is occupied.");
+        alert(`Table ${table.tableNo} is currently occupied.`);
         return;
     }
-    setSelectedTable(selectedTable === table.id ? null : table.id);
+    setSelectedTable(selectedTable === table.tableNo ? null : table.tableNo);
   }
 
   const handleProceed = () => {
@@ -32,17 +51,17 @@ export default function Home() {
     }
   }
 
-  // Helper to render the "Chair-Table-Chair" shape
+  // Helper to render the specific "Chair-Table-Chair" layout
   const renderTableUnit = (table) => {
     const isOccupied = table.status === "occupied";
-    const isSelected = selectedTable === table.id;
+    const isSelected = selectedTable === table.tableNo;
 
-    // Dynamic Colors based on status
+    // Colors
     const tableColor = isOccupied 
-        ? "bg-slate-200 border-slate-300 opacity-60" // Occupied (Gray)
+        ? "bg-slate-200 border-slate-300 opacity-60 cursor-not-allowed" 
         : isSelected 
-            ? "bg-amber-500 border-amber-600 shadow-lg shadow-amber-500/40" // Selected (Gold)
-            : "bg-white border-slate-800 hover:border-amber-400"; // Available (White with dark border like sketch)
+            ? "bg-amber-500 border-amber-600 shadow-lg shadow-amber-500/40" 
+            : "bg-white border-slate-800 hover:border-amber-400";
 
     const chairColor = isOccupied 
         ? "bg-slate-200 border-slate-300" 
@@ -50,37 +69,33 @@ export default function Home() {
             ? "bg-amber-600 border-amber-700" 
             : "bg-white border-slate-800";
     
-    // Text Color
     const textColor = isSelected ? "text-white" : "text-slate-800";
 
     return (
       <div 
-        key={table.id} 
+        key={table._id} 
         onClick={() => handleTableClick(table)}
         className="flex items-center justify-center gap-2 cursor-pointer transition-all duration-200 active:scale-95"
       >
-        {/* Left Chair */}
         <div className={`w-3 h-12 border-2 rounded-sm ${chairColor}`}></div>
 
-        {/* The Table Surface */}
         <div className={`w-28 h-28 border-2 rounded-lg flex flex-col items-center justify-center relative shadow-sm transition-all duration-300 ${tableColor}`}>
-            <span className={`text-2xl font-bold ${textColor}`}>{table.label}</span>
-            
-            {/* Status Text (Small) */}
+            <span className={`text-3xl font-bold ${textColor}`}>{table.tableNo}</span>
             <span className={`text-[9px] uppercase font-bold mt-1 tracking-wider ${isSelected ? "text-amber-100" : "text-slate-400"}`}>
                 {isOccupied ? "Busy" : "Free"}
             </span>
         </div>
 
-        {/* Right Chair */}
         <div className={`w-3 h-12 border-2 rounded-sm ${chairColor}`}></div>
       </div>
     )
   }
 
+  if (!isAuthorized || loading) return <div className="min-h-screen flex items-center justify-center">Loading Cafe Map...</div>;
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-32">
-      <Navbar isLoggedIn={false} current="Home" />
+      <Navbar isLoggedIn={true} current="Home" />
 
       {/* Hero Text */}
       <div className="text-center pt-8 pb-4">
@@ -88,20 +103,23 @@ export default function Home() {
         <p className="text-slate-500 text-sm">Tap a table to view the menu</p>
       </div>
 
-      {/* THE FLOOR PLAN CONTAINER */}
+      {/* FLOOR PLAN CONTAINER */}
       <div className="max-w-md mx-auto px-6 py-6">
         
-        {/* 1. THE COUNTER (Top of sketch) */}
+        {/* COUNTER */}
         <div className="w-full h-16 border-2 border-slate-800 bg-slate-100 dark:bg-slate-900 rounded-lg flex items-center justify-center mb-12 shadow-sm">
             <span className="text-slate-500 font-bold tracking-widest uppercase text-sm">
                 Counter & Kitchen
             </span>
         </div>
 
-        {/* 2. THE TABLES (Grid Layout like sketch) */}
-        {/* grid-cols-2 creates the Left/Right split */}
+        {/* TABLE GRID */}
+        {/* Sort tables by tableNo to ensure grid order is 1,2,3... */}
         <div className="grid grid-cols-2 gap-y-12 gap-x-4 justify-items-center">
-            {tables.map(table => renderTableUnit(table))}
+            {tables
+              .sort((a, b) => a.tableNo - b.tableNo)
+              .map(table => renderTableUnit(table))
+            }
         </div>
 
       </div>

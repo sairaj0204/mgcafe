@@ -1,198 +1,205 @@
 "use client"
 import React, { useState, useEffect } from 'react'
-import Navbar from '../components/Navbar' // Reusing Navbar for consistency
+import { useRouter } from 'next/navigation'
+import Navbar from '../components/Navbar'
 
 export default function AdminDashboard() {
-  // --- 1. MOCK DATA: LIVE ORDERS ---
-  const [orders, setOrders] = useState([
-    {
-      id: "ORD-001",
-      table: 4,
-      items: [{ name: "Cappuccino", qty: 2 }, { name: "Brownie", qty: 1 }],
-      total: 400,
-      status: "pending", // pending -> preparing -> ready -> completed
-      time: "10:30 AM"
-    },
-    {
-      id: "ORD-002",
-      table: 1,
-      items: [{ name: "Masala Chai", qty: 4 }, { name: "Bun Maska", qty: 2 }],
-      total: 240,
-      status: "preparing",
-      time: "10:32 AM"
-    },
-    {
-      id: "ORD-003",
-      table: 6,
-      items: [{ name: "Club Sandwich", qty: 1 }],
-      total: 180,
-      status: "ready",
-      time: "10:45 AM"
+  const router = useRouter()
+  const [orders, setOrders] = useState([])
+  const [tables, setTables] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [isAuthorized, setIsAuthorized] = useState(false)
+
+  useEffect(() => {
+    // 1. Security Check
+    const userStr = localStorage.getItem("mg_user")
+    if (!userStr) { router.push("/login"); return }
+    const user = JSON.parse(userStr)
+    if (user.role !== "admin") { router.push("/"); return }
+    setIsAuthorized(true)
+
+    // 2. Data Fetching
+    const fetchData = async () => {
+        try {
+            const [ordersRes, tablesRes] = await Promise.all([
+                fetch('/api/orders?status=active'),
+                fetch('/api/tables')
+            ]);
+            
+            if (ordersRes.ok) setOrders(await ordersRes.json());
+            if (tablesRes.ok) setTables(await tablesRes.json());
+        } catch (error) {
+            console.error("Error fetching admin data", error);
+        } finally {
+            setLoading(false);
+        }
     }
-  ])
 
-  // --- 2. MOCK DATA: TABLE STATUS ---
-  // (We use the same IDs as the Customer Home Page)
-  const [tables, setTables] = useState([
-    { id: 1, label: "01", status: "occupied" },
-    { id: 2, label: "02", status: "available" },
-    { id: 3, label: "03", status: "available" },
-    { id: 4, label: "04", status: "occupied" },
-    { id: 5, label: "05", status: "available" },
-    { id: 6, label: "06", status: "occupied" },
-  ])
+    fetchData();
+    const interval = setInterval(fetchData, 5000);
+    return () => clearInterval(interval);
+  }, [router]);
 
-  // --- ACTIONS ---
-  
-  // Advance Order Status (Pending -> Preparing -> Ready -> Completed)
-  const advanceOrder = (orderId) => {
-    setOrders(prev => prev.map(order => {
-        if (order.id !== orderId) return order;
-        
-        if (order.status === "pending") return { ...order, status: "preparing" };
-        if (order.status === "preparing") return { ...order, status: "ready" };
-        if (order.status === "ready") return { ...order, status: "completed" };
-        return order;
-    }).filter(o => o.status !== "completed")) // Remove completed orders from view
+  const updateStatus = async (orderId, newStatus) => {
+    // Optimistic Update
+    setOrders(prev => prev.map(o => o._id === orderId ? { ...o, status: newStatus } : o));
+
+    await fetch('/api/orders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, status: newStatus })
+    });
   }
 
-  // Toggle Table Status Manually (If customer leaves)
-  const toggleTable = (tableId) => {
-    setTables(prev => prev.map(t => 
-        t.id === tableId 
-            ? { ...t, status: t.status === "available" ? "occupied" : "available" } 
-            : t
-    ))
+  const markPaid = async (orderId) => {
+    if(!confirm("Confirm cash received?")) return;
+    
+    // Optimistic Update
+    setOrders(prev => prev.map(o => o._id === orderId ? { ...o, paymentStatus: 'paid' } : o));
+    
+    await fetch('/api/orders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, paymentStatus: 'paid' })
+    });
   }
 
-  // Calculate Stats
-  const pendingCount = orders.filter(o => o.status === "pending").length
-  const revenue = orders.reduce((sum, o) => sum + o.total, 0)
+  const toggleTable = async (tableNo, currentStatus) => {
+    const action = currentStatus === "available" ? "occupy" : "free";
+    if(!confirm(`Mark Table ${tableNo} as ${action === "occupy" ? "Occupied" : "Free"}?`)) return;
+
+    setTables(prev => prev.map(t => t.tableNo === tableNo ? { ...t, status: action === "occupy" ? "occupied" : "available" } : t));
+
+    await fetch('/api/tables', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableNo, action })
+    });
+  }
+
+  if (!isAuthorized) return null;
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950">
       <Navbar isLoggedIn={true} current="Admin" />
 
-      <div className="p-6 grid lg:grid-cols-3 gap-6 h-[calc(100vh-80px)]">
+      <div className="p-4 grid lg:grid-cols-3 gap-6 h-[calc(100vh-80px)] overflow-hidden">
         
-        {/* === LEFT COL: LIVE ORDERS (Takes up 2/3 space) === */}
-        <div className="lg:col-span-2 flex flex-col gap-6">
+        {/* === LEFT: KITCHEN FEED === */}
+        <div className="lg:col-span-2 flex flex-col h-full">
+            <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-4">Live Kitchen Feed</h2>
             
-            {/* Stats Header */}
-            <div className="grid grid-cols-3 gap-4">
-                <div className="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
-                    <p className="text-slate-500 text-xs font-bold uppercase">Pending</p>
-                    <h3 className="text-2xl font-bold text-amber-600">{pendingCount} Orders</h3>
-                </div>
-                <div className="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
-                    <p className="text-slate-500 text-xs font-bold uppercase">Active Tables</p>
-                    <h3 className="text-2xl font-bold text-blue-600">{tables.filter(t => t.status === "occupied").length} / 6</h3>
-                </div>
-                <div className="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
-                    <p className="text-slate-500 text-xs font-bold uppercase">Revenue (Session)</p>
-                    <h3 className="text-2xl font-bold text-green-600">₹{revenue}</h3>
-                </div>
-            </div>
+            <div className="flex-1 overflow-y-auto pr-2 space-y-4 pb-20">
+                {orders.map(order => {
+                    // CRITICAL LOGIC FIX:
+                    // Check if paymentStatus is ANYTHING other than 'paid'
+                    const isUnpaid = order.paymentStatus !== "paid";
 
-            {/* ORDER FEED */}
-            <div className="flex-1 overflow-y-auto pr-2 space-y-4">
-                <h2 className="text-lg font-bold text-slate-700 dark:text-slate-300">Incoming Orders</h2>
-                
-                {orders.length === 0 ? (
-                    <div className="text-center py-20 text-slate-400">No active orders</div>
-                ) : (
-                    orders.map(order => (
-                        <div key={order.id} className="bg-white dark:bg-slate-900 p-5 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex justify-between items-start animate-fade-in-up">
+                    return (
+                        <div key={order._id} className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row justify-between gap-4">
                             
-                            {/* Order Details */}
-                            <div>
+                            {/* Order Info */}
+                            <div className="flex-1">
                                 <div className="flex items-center gap-3 mb-2">
-                                    <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold px-2 py-1 rounded">
-                                        #{order.id}
+                                    <span className="bg-slate-800 text-white text-sm font-bold px-3 py-1 rounded-lg">
+                                        Table {order.tableNo}
                                     </span>
-                                    <span className="text-slate-400 text-xs font-mono">{order.time}</span>
+                                    <span className="text-xs font-bold uppercase px-2 py-1 rounded border bg-slate-100 text-slate-600">
+                                        {order.status}
+                                    </span>
+                                    {isUnpaid ? (
+                                        <span className="text-red-600 text-xs font-bold animate-pulse">
+                                            ⚠️ Unpaid ({order.paymentMethod})
+                                        </span>
+                                    ) : (
+                                        <span className="text-green-500 text-xs font-bold">
+                                            ✓ Paid
+                                        </span>
+                                    )}
                                 </div>
-                                <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-1">
-                                    Table {order.table}
-                                </h3>
-                                <ul className="text-sm text-slate-600 dark:text-slate-400 space-y-1">
+                                <p className="text-xs text-slate-500 mb-3 font-medium">
+                                    {order.userId?.name} • +91 {order.userId?.phone}
+                                </p>
+                                <div className="space-y-1 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg">
                                     {order.items.map((item, i) => (
-                                        <li key={i}>• {item.qty}x <span className="font-medium text-slate-800 dark:text-slate-200">{item.name}</span></li>
+                                        <div key={i} className="flex gap-3 text-sm text-slate-700 dark:text-slate-200">
+                                            <span className="font-bold">{item.qty}x</span>
+                                            <span>{item.name}</span>
+                                        </div>
                                     ))}
-                                </ul>
-                                <p className="mt-3 font-bold text-slate-800 dark:text-white">Total: ₹{order.total}</p>
+                                </div>
                             </div>
 
-                            {/* Action Button */}
-                            <div className="flex flex-col items-end gap-2">
-                                <StatusBadge status={order.status} />
-                                <button 
-                                    onClick={() => advanceOrder(order.id)}
-                                    className={`
-                                        mt-4 px-6 py-2 rounded-lg font-bold text-sm shadow-md transition-all active:scale-95
-                                        ${order.status === "pending" ? "bg-amber-500 hover:bg-amber-600 text-white" : 
-                                          order.status === "preparing" ? "bg-blue-600 hover:bg-blue-700 text-white" : 
-                                          "bg-green-600 hover:bg-green-700 text-white"}
-                                    `}
-                                >
-                                    {order.status === "pending" ? "Accept Order" : 
-                                     order.status === "preparing" ? "Mark Ready" : 
-                                     "Complete"}
-                                </button>
+                            {/* BUTTONS COLUMN */}
+                            <div className="flex flex-col gap-2 min-w-[160px] justify-center border-l pl-4 border-slate-100 dark:border-slate-800">
+                                
+                                {/* Step 1: Pending -> Preparing */}
+                                {order.status === "pending" && (
+                                    <button onClick={() => updateStatus(order._id, "preparing")} className="w-full bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-lg font-bold text-sm">
+                                        Accept & Prepare
+                                    </button>
+                                )}
+
+                                {/* Step 2: Preparing -> Served */}
+                                {order.status === "preparing" && (
+                                    <button onClick={() => updateStatus(order._id, "served")} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-bold text-sm">
+                                        Mark Served
+                                    </button>
+                                )}
+
+                                {/* Step 3: Served -> Completed (LOCKED IF UNPAID) */}
+                                {order.status === "served" && (
+                                    <button 
+                                        onClick={() => updateStatus(order._id, "completed")} 
+                                        disabled={isUnpaid} // Logic here
+                                        className={`w-full py-3 rounded-lg font-bold text-sm transition-all
+                                            ${isUnpaid 
+                                                ? "bg-slate-200 text-slate-400 cursor-not-allowed border-2 border-slate-300" 
+                                                : "bg-green-600 hover:bg-green-700 text-white shadow-md"
+                                            }
+                                        `}
+                                    >
+                                        {isUnpaid ? "Wait: Collect Cash" : "Complete Order"}
+                                    </button>
+                                )}
+
+                                {/* Cash Collection Button (Only visible if Unpaid) */}
+                                {isUnpaid && (
+                                    <button 
+                                        onClick={() => markPaid(order._id)} 
+                                        className="w-full border-2 border-green-500 text-green-600 hover:bg-green-50 py-2 rounded-lg font-bold text-sm mt-2"
+                                    >
+                                        💵 Received Cash
+                                    </button>
+                                )}
+
                             </div>
                         </div>
-                    ))
-                )}
+                    );
+                })}
             </div>
         </div>
 
-        {/* === RIGHT COL: TABLE MAP (Takes up 1/3 space) === */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 h-full flex flex-col">
-            <h2 className="text-lg font-bold text-slate-700 dark:text-slate-300 mb-6">Live Floor Plan</h2>
-            
-            <div className="grid grid-cols-2 gap-4 auto-rows-fr">
+        {/* === RIGHT: TABLE MAP === */}
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 h-fit shadow-sm">
+            <h3 className="font-bold text-slate-800 dark:text-white mb-6">Table Status</h3>
+            <div className="grid grid-cols-2 gap-4">
                 {tables.map(table => (
                     <div 
-                        key={table.id}
-                        onClick={() => toggleTable(table.id)}
-                        className={`
-                            relative rounded-xl flex flex-col items-center justify-center p-6 cursor-pointer transition-all border-2
-                            ${table.status === "occupied" 
-                                ? "bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800" 
-                                : "bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800 hover:scale-105"
-                            }
-                        `}
+                        key={table._id}
+                        onClick={() => toggleTable(table.tableNo, table.status)}
+                        className={`p-6 rounded-xl border-2 text-center cursor-pointer ${
+                            table.status === "occupied" ? "bg-red-50 border-red-200 text-red-600" : "bg-green-50 border-green-200 text-green-600"
+                        }`}
                     >
-                        <span className={`text-2xl font-bold ${table.status === "occupied" ? "text-red-700 dark:text-red-400" : "text-green-700 dark:text-green-400"}`}>
-                            {table.label}
-                        </span>
-                        <span className={`text-[10px] uppercase font-bold mt-1 ${table.status === "occupied" ? "text-red-500" : "text-green-500"}`}>
-                            {table.status === "occupied" ? "Occupied" : "Free"}
-                        </span>
+                        <span className="text-3xl font-bold">{table.tableNo}</span>
+                        <p className="text-[10px] uppercase font-bold mt-2">{table.status}</p>
                     </div>
                 ))}
-            </div>
-
-            <div className="mt-auto pt-6 text-center">
-                 <p className="text-xs text-slate-400">Tap a table to force-free/occupy it.</p>
             </div>
         </div>
 
       </div>
     </div>
   )
-}
-
-// Small Helper Component for the Badge
-function StatusBadge({ status }) {
-    const styles = {
-        pending: "bg-amber-100 text-amber-700 border-amber-200",
-        preparing: "bg-blue-100 text-blue-700 border-blue-200",
-        ready: "bg-green-100 text-green-700 border-green-200",
-    }
-    return (
-        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase border ${styles[status] || styles.pending}`}>
-            {status}
-        </span>
-    )
 }
