@@ -1,25 +1,27 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 
 const CafePayment = ({ amount, orderId, onVerify }) => {
-  // --- CONFIGURATION FROM YOUR PHYSICAL QR ---
+  // --- CONFIGURATION ---
   const upiID = "ibkPOS.EP176726@icici";
   const payeeName = "M/S.M G CAFE AND MOCKTAILS";
+  const merchantCode = "5812";
+  const staticBase = "EPYSSQREP176726";
   
-  // THE CRITICAL FIX: 
-  // We must use the EXACT static 'tr' (Transaction Ref) from your physical machine.
-  // If we change this to orderId, the Soundbox/POS stops recognizing the payment.
-  const staticRefId = "EPYSSQREP176726"; 
-  
+  // --- RANDOM SUFFIX LOGIC ---
+  const [transactionRef, setTransactionRef] = useState("");
+
+  // Generate random ref only on client-side mount to avoid hydration mismatch
+  useEffect(() => {
+    // Generates a random number between 1000 and 9999
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    setTransactionRef(`${staticBase}-${randomSuffix}`);
+  }, [staticBase]);
+
   // Construct the UPI Link
-  // 1. pa (Address): Fixed
-  // 2. pn (Name): Fixed
-  // 3. tr (Ref): MUST BE STATIC for Soundbox to work
-  // 4. am (Amount): Dynamic from your Cart
-  // 5. cu (Currency): INR
-  const upiLink = `upi://pay?pa=${upiID}&pn=${encodeURIComponent(payeeName)}&tr=${staticRefId}&am=${amount}&cu=INR`;
+  const upiLink = `upi://pay?pa=${upiID}&pn=${encodeURIComponent(payeeName)}&mc=${merchantCode}&mode=00&tr=${transactionRef}&tn=Order_${orderId}&am=${amount}&cu=INR`;
 
   const [copied, setCopied] = useState(false);
   const [utrInput, setUtrInput] = useState("");
@@ -53,6 +55,9 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
     onVerify(cleanUTR).finally(() => setIsVerifying(false));
   };
 
+  // Wait for client-side generation of random ID
+  if (!transactionRef) return null;
+
   return (
     <div className="w-full max-w-sm mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
       
@@ -60,7 +65,7 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
       <div className="bg-slate-50 p-6 text-center border-b border-slate-100">
         <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Total Payable</p>
         <h2 className="text-3xl font-extrabold text-slate-800">₹{amount}</h2>
-        <p className="text-xs text-slate-400 mt-2">Order #{orderId?.slice(-6).toUpperCase()}</p>
+        <p className="text-xs text-slate-400 mt-2 font-mono">Ref: {transactionRef.slice(-9)}</p>
       </div>
 
       <div className="p-6 space-y-6">
@@ -76,7 +81,7 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
              <QRCodeSVG 
                 value={upiLink} 
                 size={180}
-                level={"H"}
+                level={"M"} 
                 includeMargin={false}
               />
           </div>
