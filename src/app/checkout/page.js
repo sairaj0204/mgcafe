@@ -11,7 +11,7 @@ function CheckoutContent() {
   const { cart, clearCart } = useCart() 
   const [note, setNote] = useState("")
   
-  // 1. Default to "cash" since online is disabled
+  // Default to "online" to encourage digital payments, or keep "cash"
   const [paymentMethod, setPaymentMethod] = useState("cash") 
   const [isProcessing, setIsProcessing] = useState(false)
   const [menuItems, setMenuItems] = useState([]);
@@ -33,15 +33,13 @@ function CheckoutContent() {
   const handlePlaceOrder = async () => {
     if (cartItems.length === 0) return;
     
-    // Block Online Payments for now
-    if (paymentMethod === "online") return;
-
     setIsProcessing(true);
     
     const userStr = localStorage.getItem("mg_user");
     if (!userStr) {
         alert("Please login first");
         router.push("/login");
+        setIsProcessing(false); // Reset processing state
         return;
     }
     const user = JSON.parse(userStr);
@@ -52,24 +50,36 @@ function CheckoutContent() {
             tableNo: tableNumber,
             items: cartItems.map(i => ({ name: i.name, price: i.price, qty: i.qty })),
             totalAmount: grandTotal,
-            paymentMethod: "cash",
-            paymentStatus: "pending", // Cash is always pending initially
+            paymentMethod: paymentMethod, // "cash" or "online"
+            paymentStatus: "pending", 
             note: note
         };
 
+        // 1. Create the Order in DB first
         const res = await fetch("/api/orders", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(orderData)
         });
 
+        const data = await res.json();
+
         if (res.ok) {
-            alert("Order Placed Successfully! Please pay cash at the counter.");
-            clearCart();
-            router.push("/");
+            if (paymentMethod === "online") {
+                // === ONLINE FLOW ===
+                // Redirect to the Payment/QR Page using the new Order ID
+                // IMPORTANT: Ensure your API returns the created order's _id or orderId
+                const orderId = data._id || data.orderId; 
+                clearCart(); // Optional: Clear cart now or after payment success
+                router.push(`/payment/${orderId}`);
+            } else {
+                // === CASH FLOW ===
+                alert("Order Placed Successfully! Please pay cash at the counter.");
+                clearCart();
+                router.push("/");
+            }
         } else {
-            const err = await res.json();
-            alert("Failed: " + err.error);
+            alert("Failed: " + (data.error || "Could not place order"));
         }
 
     } catch (error) {
@@ -127,7 +137,7 @@ function CheckoutContent() {
             <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-3">Payment Method</h3>
             <div className="grid grid-cols-2 gap-4">
                 
-                {/* 1. CASH BUTTON (Active) */}
+                {/* 1. CASH BUTTON */}
                 <button
                     onClick={() => setPaymentMethod("cash")}
                     className={`p-4 rounded-xl border-2 font-bold transition-all flex flex-col items-center gap-2 relative overflow-hidden ${
@@ -141,18 +151,18 @@ function CheckoutContent() {
                     {paymentMethod === "cash" && <div className="absolute top-2 right-2 w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>}
                 </button>
 
-                {/* 2. ONLINE BUTTON (Disabled) */}
+                {/* 2. ONLINE BUTTON (ENABLED NOW) */}
                 <button
                     onClick={() => setPaymentMethod("online")}
-                    className={`p-4 rounded-xl border-2 font-bold transition-all flex flex-col items-center gap-2 opacity-60 ${
+                    className={`p-4 rounded-xl border-2 font-bold transition-all flex flex-col items-center gap-2 relative overflow-hidden ${
                         paymentMethod === "online" 
-                        ? "border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400" 
-                        : "border-slate-200 dark:border-slate-800 text-slate-400 bg-slate-50 dark:bg-slate-900"
+                        ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400 shadow-md" 
+                        : "border-slate-200 dark:border-slate-800 text-slate-400 bg-white dark:bg-slate-900 hover:border-blue-200"
                     }`}
                 >
                     <span className="text-2xl">📱</span>
-                    <span className="text-sm">Online</span>
-                    <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-500 px-2 py-0.5 rounded-full absolute top-2 right-2">Soon</span>
+                    <span className="text-sm">UPI / QR</span>
+                    {paymentMethod === "online" && <div className="absolute top-2 right-2 w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>}
                 </button>
 
             </div>
@@ -172,24 +182,26 @@ function CheckoutContent() {
         <div className="max-w-md mx-auto">
             <button 
                 onClick={handlePlaceOrder}
-                disabled={isProcessing || paymentMethod === "online"}
+                disabled={isProcessing}
                 className={`
                     w-full text-white text-lg font-bold py-4 rounded-xl shadow-lg flex justify-between px-6 transition-all active:scale-95
-                    ${paymentMethod === "online" 
-                        ? "bg-slate-400 cursor-not-allowed opacity-80" // Disabled Style
-                        : isProcessing 
-                            ? "bg-green-800 cursor-wait" 
-                            : "bg-green-600 hover:bg-green-700 shadow-green-600/30" // Active Cash Style
+                    ${isProcessing 
+                        ? "bg-slate-700 cursor-wait" 
+                        : paymentMethod === 'online' 
+                            ? "bg-blue-600 hover:bg-blue-700 shadow-blue-600/30" 
+                            : "bg-green-600 hover:bg-green-700 shadow-green-600/30"
                     }
                 `}
             >
                 <span>
-                    {paymentMethod === "online" 
-                        ? "⚠️ Online Payment Unavailable" 
-                        : isProcessing ? "Processing..." : "Place Order (Cash)"
+                    {isProcessing 
+                        ? "Processing..." 
+                        : paymentMethod === 'online' 
+                            ? "Pay & Place Order" 
+                            : "Place Order (Cash)"
                     }
                 </span>
-                {paymentMethod === "cash" && <span>₹{grandTotal}</span>}
+                {!isProcessing && <span>₹{grandTotal}</span>}
             </button>
         </div>
       </div>
@@ -200,7 +212,7 @@ function CheckoutContent() {
 
 export default function CheckoutPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense fallback={<div>Loading Checkout...</div>}>
       <CheckoutContent />
     </Suspense>
   )

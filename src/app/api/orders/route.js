@@ -4,7 +4,6 @@ import Order from "@/models/Order";
 import Table from "@/models/Table";
 import User from "@/models/User"; 
 
-
 // 1. GET ORDERS (For Admin)
 export async function GET(request) {
   await connectDB();
@@ -31,11 +30,12 @@ export async function POST(request) {
     await connectDB();
     const body = await request.json();
     
-    // 👇 SECURITY UPDATE: Force correct payment status
-    // If Cash -> Pending. If Online -> Paid.
+    // 👇 FIX: paymentStatus must ALWAYS be 'pending' initially.
+    // For Cash: Wait for cashier.
+    // For Online: Wait for UTR verification on the next page.
     const orderData = {
         ...body,
-        paymentStatus: body.paymentMethod === "cash" ? "pending" : "paid"
+        paymentStatus: "pending" 
     };
 
     // A. Create the Order
