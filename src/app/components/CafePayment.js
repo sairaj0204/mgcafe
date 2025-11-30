@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 
 const CafePayment = ({ amount, orderId, onVerify }) => {
@@ -8,17 +8,30 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
   const upiID = "ibkPOS.EP176726@icici";
   const payeeName = "M/S.M G CAFE AND MOCKTAILS";
   const merchantCode = "5812";
-  const staticRef = "EPYSSQREP176726";
+  const staticRefPrefix = "EPYSSQREP176726";
 
-  // --- STRATEGY 1: FOR QR CODE (Exact Replica of Standee) ---
-  // We include the static 'tr' so the Soundbox recognizes it when scanned.
-  // We rely on the user's camera scan to make the bank accept it.
-  const qrLink = `upi://pay?pa=${upiID}&pn=${encodeURIComponent(payeeName)}&mc=${merchantCode}&tr=${staticRef}&am=${amount}&cu=INR&mode=01`;
+  const [transactionRef, setTransactionRef] = useState("");
 
-  // --- STRATEGY 2: FOR BUTTON (Clean Link) ---
-  // We REMOVE 'tr' entirely. This forces GPay/PhonePe to generate a new, unique ID.
-  // We REMOVE 'mode' so the app decides the best method.
-  const deepLink = `upi://pay?pa=${upiID}&pn=${encodeURIComponent(payeeName)}&mc=${merchantCode}&am=${amount}&cu=INR`;
+  useEffect(() => {
+    // Generate a unique reference using the Static Prefix + Order Suffix
+    // This helps the Soundbox recognize the prefix, and the Bank see a unique ID.
+    // Format: EPYSSQREP176726-A1B2
+    const uniqueSuffix = orderId ? orderId.slice(-4).toUpperCase() : Math.floor(Math.random() * 1000);
+    setTransactionRef(`${staticRefPrefix}-${uniqueSuffix}`);
+  }, [orderId]);
+
+  // --- 1. QR CODE LINK (Full Merchant Details for Soundbox) ---
+  // User confirmed this triggers the sound.
+  // We keep 'mc', 'mode=01', and the specific 'tr'.
+  const qrLink = `upi://pay?pa=${upiID}&pn=${encodeURIComponent(payeeName)}&mc=${merchantCode}&tr=${transactionRef}&am=${amount}&cu=INR&mode=01`;
+
+  // --- 2. DEEP LINK / BUTTON (Minimalist Strategy) ---
+  // User Request: Keep 'tr', remove others.
+  // We remove 'mc' and 'mode' to reduce strictness checks by the app/bank.
+  // We keep 'tr' so it might still link to the specific terminal transaction list.
+  const deepLink = transactionRef 
+    ? `upi://pay?pa=${upiID}&pn=${encodeURIComponent(payeeName)}&tr=${transactionRef}&am=${amount}&cu=INR`
+    : "";
 
   const [copied, setCopied] = useState(false);
   const [utrInput, setUtrInput] = useState("");
@@ -44,18 +57,21 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
     onVerify(cleanUTR).finally(() => setIsVerifying(false));
   };
 
+  // Prevent hydration mismatch
+  if (!transactionRef) return null;
+
   return (
     <div className="w-full max-w-sm mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
       
       <div className="bg-slate-50 p-6 text-center border-b border-slate-100">
         <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Total Payable</p>
         <h2 className="text-3xl font-extrabold text-slate-800">₹{amount}</h2>
-        <p className="text-xs text-slate-400 mt-2">Order #{orderId?.slice(-6).toUpperCase()}</p>
+        <p className="text-xs text-slate-400 mt-2 font-mono">Order #{orderId?.slice(-6).toUpperCase()}</p>
       </div>
 
       <div className="p-6 space-y-6">
         
-        {/* QR CODE SECTION (Uses Static TR) */}
+        {/* QR CODE SECTION */}
         <div className="flex justify-center">
           <div className="p-3 bg-white border-2 border-dashed border-orange-300 rounded-2xl shadow-sm relative">
              <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-orange-500 rounded-tl-lg -mt-1 -ml-1"></div>
@@ -72,7 +88,7 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
           </div>
         </div>
 
-        {/* TAP TO PAY BUTTON (Uses Clean Link - No TR) */}
+        {/* TAP TO PAY BUTTON */}
         <a 
           href={deepLink}
           className="block w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold py-3.5 px-4 rounded-xl text-center shadow-lg shadow-blue-600/20 active:scale-95 transition-transform flex items-center justify-center gap-2"
@@ -112,15 +128,29 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
                   setErrorMessage(""); 
               }}
               placeholder="e.g. 324512345678"
-              className={`w-full border-2 rounded-xl px-4 py-3 text-lg font-mono tracking-widest focus:outline-none focus:ring-4 transition-all ${errorMessage ? "border-red-300 bg-red-50" : "border-slate-200 focus:border-orange-500 bg-slate-50"}`}
+              className={`w-full border-2 rounded-xl px-4 py-3 text-lg font-mono tracking-widest focus:outline-none focus:ring-4 transition-all ${errorMessage ? "border-red-300 focus:border-red-500 focus:ring-red-500/20 bg-red-50" : "border-slate-200 focus:border-orange-500 focus:ring-orange-500/20 bg-slate-50"}`}
             />
-            {errorMessage && <p className="text-xs text-red-600 font-bold">{errorMessage}</p>}
+            
+            {errorMessage && (
+                <p className="text-xs text-red-600 font-medium animate-pulse flex items-center gap-1">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"></path></svg>
+                    {errorMessage}
+                </p>
+            )}
+
             <button 
               onClick={handleSubmit}
               disabled={isVerifying}
-              className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-black active:scale-95 transition-all disabled:opacity-70"
+              className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-black active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2"
             >
-              {isVerifying ? "Verifying..." : "Verify & Complete"}
+              {isVerifying ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <span>Verifying...</span>
+                  </>
+              ) : (
+                  "Verify & Complete"
+              )}
             </button>
           </div>
         </div>
