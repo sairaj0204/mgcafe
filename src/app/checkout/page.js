@@ -4,28 +4,18 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Navbar from '../components/Navbar'
 import { useCart } from '@/context/CartContext'
 
-// Helper to load Razorpay Script
-const loadRazorpayScript = () => {
-  return new Promise((resolve) => {
-    const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
-  });
-};
-
 function CheckoutContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const tableNumber = searchParams.get('table') || "?"
   const { cart, clearCart } = useCart() 
   const [note, setNote] = useState("")
-  const [paymentMethod, setPaymentMethod] = useState("online") 
+  
+  // 1. Default to "cash" since online is disabled
+  const [paymentMethod, setPaymentMethod] = useState("cash") 
   const [isProcessing, setIsProcessing] = useState(false)
   const [menuItems, setMenuItems] = useState([]);
 
-  // Fetch Menu Data
   useEffect(() => {
     fetch('/api/menu').then(res => res.json()).then(data => setMenuItems(data));
   }, []);
@@ -37,12 +27,15 @@ function CheckoutContent() {
   }).filter(item => item !== null)
 
   const itemTotal = cartItems.reduce((sum, item) => sum + (item.price * item.qty), 0)
-  const tax = Math.round(itemTotal * 0.05)
-  const grandTotal = itemTotal + tax
+  const tax = "Included"
+  const grandTotal = itemTotal 
 
-  // --- THE CORE PAYMENT LOGIC ---
   const handlePlaceOrder = async () => {
     if (cartItems.length === 0) return;
+    
+    // Block Online Payments for now
+    if (paymentMethod === "online") return;
+
     setIsProcessing(true);
     
     const userStr = localStorage.getItem("mg_user");
@@ -54,97 +47,49 @@ function CheckoutContent() {
     const user = JSON.parse(userStr);
 
     try {
-        // SCENARIO A: CASH PAYMENT
-        if (paymentMethod === "cash") {
-            await createOrderInDB(user, "pending", null);
-            alert("Order Placed! Please pay cash at the counter.");
-            clearCart();
-            router.push("/");
-            return;
-        }
-
-        // SCENARIO B: ONLINE PAYMENT (RAZORPAY)
-        const isScriptLoaded = await loadRazorpayScript();
-        if (!isScriptLoaded) {
-            alert("Failed to load payment gateway");
-            setIsProcessing(false);
-            return;
-        }
-
-        // 1. Create Order on Razorpay Server
-        const orderRes = await fetch("/api/payment", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ amount: grandTotal }),
-        });
-        const orderData = await orderRes.json();
-
-        // 2. Open Razorpay Options
-        const options = {
-            key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID, // Use Environment Variable if possible, or string
-            amount: orderData.amount,
-            currency: orderData.currency,
-            name: "MG Cafe",
-            description: `Table ${tableNumber} Bill`,
-            order_id: orderData.id,
-            handler: async function (response) {
-                // 3. Payment Success! Create Order in MongoDB
-                await createOrderInDB(user, "paid", {
-                    orderId: response.razorpay_order_id,
-                    paymentId: response.razorpay_payment_id,
-                    signature: response.razorpay_signature,
-                });
-                alert("Payment Successful! Order Placed.");
-                clearCart();
-                router.push("/");
-            },
-            prefill: {
-                name: user.name || "",
-                contact: user.phone || "",
-            },
-            theme: { color: "#d97706" }, // Amber-600 color
+        const orderData = {
+            userId: user._id,
+            tableNo: tableNumber,
+            items: cartItems.map(i => ({ name: i.name, price: i.price, qty: i.qty })),
+            totalAmount: grandTotal,
+            paymentMethod: "cash",
+            paymentStatus: "pending", // Cash is always pending initially
+            note: note
         };
 
-        const paymentObject = new window.Razorpay(options);
-        paymentObject.open();
-        
-        // Handle closure without payment
-        paymentObject.on('payment.failed', function (response){
-            alert("Payment Failed. Please try again.");
-            setIsProcessing(false);
+        const res = await fetch("/api/orders", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(orderData)
         });
+
+        if (res.ok) {
+            alert("Order Placed Successfully! Please pay cash at the counter.");
+            clearCart();
+            router.push("/");
+        } else {
+            const err = await res.json();
+            alert("Failed: " + err.error);
+        }
 
     } catch (error) {
         console.error(error);
         alert("Something went wrong");
+    } finally {
         setIsProcessing(false);
     }
   };
 
-  // Helper to save to MongoDB
-  const createOrderInDB = async (user, paymentStatus, razorpayDetails) => {
-    const orderData = {
-        userId: user._id,
-        tableNo: tableNumber,
-        items: cartItems.map(i => ({ name: i.name, price: i.price, qty: i.qty })),
-        totalAmount: grandTotal,
-        paymentMethod: paymentMethod,
-        paymentStatus: paymentStatus,
-        razorpay: razorpayDetails,
-        note: note
-    };
-
-    await fetch("/api/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(orderData)
-    });
-  }
-
-  // ... (Keep your Empty Cart View logic here) ...
-  if (cartItems.length === 0 && menuItems.length > 0) {
-     // ... copy from previous code ...
-     return <div>Cart Empty...</div>
+  if (cartItems.length === 0) {
+    return (
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-4">
+            <Navbar isLoggedIn={true} current="Menu" />
+            <div className="text-center mt-20">
+                <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Cart is Empty</h1>
+                <button onClick={() => router.push(`/menu?table=${tableNumber}`)} className="mt-4 px-6 py-3 bg-amber-600 text-white rounded-full font-bold shadow-lg">Go back to Menu</button>
+            </div>
+        </div>
+    )
   }
 
   return (
@@ -155,28 +100,71 @@ function CheckoutContent() {
         <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-1">Checkout</h1>
         <p className="text-sm text-slate-500 mb-6 font-medium">Ordering for Table {tableNumber}</p>
 
-        {/* ... (Keep your existing Order Summary Card) ... */}
-        {/* ... (Keep your existing Payment Method Buttons) ... */}
-        
-        {/* TEMPLATE FOR SUMMARY (Copy paste your existing JSX here) */}
+        {/* Order Summary */}
         <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden mb-6">
-            {/* ... items map ... */}
-            <div className="p-4 space-y-2">
-               {cartItems.map(item => (
-                   <div key={item._id} className="flex justify-between">
-                       <span>{item.qty}x {item.name}</span>
-                       <span>₹{item.price * item.qty}</span>
-                   </div>
-               ))}
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
+                <h3 className="font-bold text-slate-700 dark:text-slate-200">Order Summary</h3>
+            </div>
+            <div className="p-4 space-y-4">
+                {cartItems.map((item) => (
+                    <div key={item._id} className="flex justify-between items-start">
+                        <div className="flex gap-3 items-start">
+                            <div className="bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-400 text-xs font-bold px-2 py-1 rounded mt-0.5">{item.qty}x</div>
+                            <div><p className="text-slate-800 dark:text-slate-200 font-medium text-sm">{item.name}</p><p className="text-xs text-slate-400">₹{item.price} each</p></div>
+                        </div>
+                        <span className="font-bold text-slate-800 dark:text-white text-sm">₹{item.price * item.qty}</span>
+                    </div>
+                ))}
+            </div>
+            <div className="p-4 pt-0 border-t border-dashed border-slate-100 dark:border-slate-800 mt-2">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block mt-4">Cooking Note</label>
+                <input type="text" placeholder="e.g. Less spicy..." value={note} onChange={(e) => setNote(e.target.value)} className="w-full text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg p-3 focus:outline-none focus:border-amber-500 transition-colors dark:text-white" />
             </div>
         </div>
-        
-        {/* Payment Buttons (Copy from previous code) */}
-        <div className="mb-6 grid grid-cols-2 gap-4">
-             <button onClick={() => setPaymentMethod("online")} className={`p-4 border-2 rounded-xl ${paymentMethod === "online" ? "border-amber-500 bg-amber-50" : "border-slate-200"}`}>UPI/Online</button>
-             <button onClick={() => setPaymentMethod("cash")} className={`p-4 border-2 rounded-xl ${paymentMethod === "cash" ? "border-green-500 bg-green-50" : "border-slate-200"}`}>Cash</button>
+
+        {/* Payment Method Selector */}
+        <div className="mb-6">
+            <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-3">Payment Method</h3>
+            <div className="grid grid-cols-2 gap-4">
+                
+                {/* 1. CASH BUTTON (Active) */}
+                <button
+                    onClick={() => setPaymentMethod("cash")}
+                    className={`p-4 rounded-xl border-2 font-bold transition-all flex flex-col items-center gap-2 relative overflow-hidden ${
+                        paymentMethod === "cash" 
+                        ? "border-green-500 bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 shadow-md" 
+                        : "border-slate-200 dark:border-slate-800 text-slate-400 bg-white dark:bg-slate-900 hover:border-green-200"
+                    }`}
+                >
+                    <span className="text-2xl">💵</span>
+                    <span className="text-sm">Pay Cash</span>
+                    {paymentMethod === "cash" && <div className="absolute top-2 right-2 w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>}
+                </button>
+
+                {/* 2. ONLINE BUTTON (Disabled) */}
+                <button
+                    onClick={() => setPaymentMethod("online")}
+                    className={`p-4 rounded-xl border-2 font-bold transition-all flex flex-col items-center gap-2 opacity-60 ${
+                        paymentMethod === "online" 
+                        ? "border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400" 
+                        : "border-slate-200 dark:border-slate-800 text-slate-400 bg-slate-50 dark:bg-slate-900"
+                    }`}
+                >
+                    <span className="text-2xl">📱</span>
+                    <span className="text-sm">Online</span>
+                    <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-500 px-2 py-0.5 rounded-full absolute top-2 right-2">Soon</span>
+                </button>
+
+            </div>
         </div>
 
+        {/* Bill Details */}
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-slate-100 dark:border-slate-800">
+             <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400 mb-2"><span>Item Total</span><span>₹{itemTotal}</span></div>
+             <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400 mb-2"><span>GST (5%)</span><span>{tax}</span></div>
+             <div className="border-t border-dashed border-slate-200 dark:border-slate-700 my-3"></div>
+             <div className="flex justify-between text-lg font-bold text-slate-900 dark:text-white"><span>Grand Total</span><span>₹{grandTotal}</span></div>
+        </div>
       </div>
 
       {/* Sticky Action Bar */}
@@ -184,19 +172,24 @@ function CheckoutContent() {
         <div className="max-w-md mx-auto">
             <button 
                 onClick={handlePlaceOrder}
-                disabled={isProcessing}
+                disabled={isProcessing || paymentMethod === "online"}
                 className={`
                     w-full text-white text-lg font-bold py-4 rounded-xl shadow-lg flex justify-between px-6 transition-all active:scale-95
-                    ${isProcessing 
-                        ? "bg-slate-400 cursor-wait" 
-                        : paymentMethod === "cash" 
-                            ? "bg-green-600 hover:bg-green-700" 
-                            : "bg-amber-600 hover:bg-amber-700"
+                    ${paymentMethod === "online" 
+                        ? "bg-slate-400 cursor-not-allowed opacity-80" // Disabled Style
+                        : isProcessing 
+                            ? "bg-green-800 cursor-wait" 
+                            : "bg-green-600 hover:bg-green-700 shadow-green-600/30" // Active Cash Style
                     }
                 `}
             >
-                <span>{isProcessing ? "Processing..." : paymentMethod === "cash" ? "Place Order (Cash)" : "Pay Now"}</span>
-                <span>₹{grandTotal}</span>
+                <span>
+                    {paymentMethod === "online" 
+                        ? "⚠️ Online Payment Unavailable" 
+                        : isProcessing ? "Processing..." : "Place Order (Cash)"
+                    }
+                </span>
+                {paymentMethod === "cash" && <span>₹{grandTotal}</span>}
             </button>
         </div>
       </div>

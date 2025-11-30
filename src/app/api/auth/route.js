@@ -7,43 +7,59 @@ export async function POST(request) {
     await connectDB();
     const { action, phone, otp, name } = await request.json();
 
-    // --- 1. SEND OTP (Simulated) ---
+    // --- 1. SEND OTP (SIMULATED) ---
     if (action === "send_otp") {
-      // Check if user exists, if not create them
       let user = await User.findOne({ phone });
+      
       if (!user) {
         user = await User.create({ 
             phone, 
-            name: name || "New User",
-            isVerified: false 
+            name: name || "Guest User",
+            isVerified: false,
+            role: "user"
         });
       }
+
+      // Generate 4-digit OTP
+      const generatedOtp = Math.floor(1000 + Math.random() * 9000).toString();
       
-      // In a real app, we would send SMS here.
-      // For now, we do nothing because the code is always 123456.
-      return NextResponse.json({ message: "OTP sent successfully" });
+      // Save to DB
+      user.otp = generatedOtp;
+      user.otpExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 mins expiry
+      await user.save();
+
+      // Return OTP to Frontend for Alert (Simulation)
+      return NextResponse.json({ 
+          message: "OTP Generated", 
+          debug_code: generatedOtp 
+      });
     }
 
-    // --- 2. VERIFY OTP (Static Check) ---
+    // --- 2. VERIFY OTP ---
     if (action === "verify_otp") {
-      // THE BACKDOOR: Check if OTP is 123456
-      if (otp === "123456") {
-        
-        // Find and update user
-        const user = await User.findOneAndUpdate(
-            { phone },
-            { isVerified: true },
-            { new: true } // Return updated doc
-        );
+      // Backdoor for testing
+      if (otp === "1112") {
+         const user = await User.findOneAndUpdate(
+             { phone }, 
+             { isVerified: true }, 
+             { new: true }
+         );
+         return NextResponse.json({ message: "Login successful", user });
+      }
 
-        if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+      const user = await User.findOne({ phone });
+      if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-        return NextResponse.json({ 
-          message: "Login successful", 
-          user: { _id: user._id, phone: user.phone, role: user.role, name: user.name } 
-        });
+      // Check DB stored OTP
+      if (user.otp === otp && new Date(user.otpExpires) > new Date()) {
+        user.isVerified = true;
+        user.otp = undefined; // Clear OTP
+        user.otpExpires = undefined;
+        await user.save();
+
+        return NextResponse.json({ message: "Login successful", user });
       } else {
-        return NextResponse.json({ error: "Invalid OTP (Hint: Use 123456)" }, { status: 400 });
+        return NextResponse.json({ error: "Invalid or expired OTP" }, { status: 400 });
       }
     }
 

@@ -37,7 +37,7 @@ function Navbar({ isLoggedIn, current }) {
   // 2. Define Links based on Role
   const navLinks = userRole === "admin" 
     ? ["Home", "Menu", "Admin", "admin/Reports"]
-    : ["Home", "Menu"];
+    : ["Home", "Menu", "myorders"];
 
   // 3. Logout Logic
   const handleLogout = () => {
