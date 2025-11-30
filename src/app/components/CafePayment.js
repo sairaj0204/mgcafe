@@ -13,24 +13,20 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
   const [transactionRef, setTransactionRef] = useState("");
 
   useEffect(() => {
-    // Generate a unique reference using the Static Prefix + Order Suffix
-    // This helps the Soundbox recognize the prefix, and the Bank see a unique ID.
-    // Format: EPYSSQREP176726-A1B2
+    // Generate unique suffix for TR
     const uniqueSuffix = orderId ? orderId.slice(-4).toUpperCase() : Math.floor(Math.random() * 1000);
     setTransactionRef(`${staticRefPrefix}-${uniqueSuffix}`);
   }, [orderId]);
 
-  // --- 1. QR CODE LINK (Full Merchant Details for Soundbox) ---
-  // User confirmed this triggers the sound.
-  // We keep 'mc', 'mode=01', and the specific 'tr'.
+  // --- 1. QR CODE LINK (Full Details) ---
   const qrLink = `upi://pay?pa=${upiID}&pn=${encodeURIComponent(payeeName)}&mc=${merchantCode}&tr=${transactionRef}&am=${amount}&cu=INR&mode=01`;
 
-  // --- 2. DEEP LINK / BUTTON (Minimalist Strategy) ---
-  // User Request: Keep 'tr', remove others.
-  // We remove 'mc' and 'mode' to reduce strictness checks by the app/bank.
-  // We keep 'tr' so it might still link to the specific terminal transaction list.
+  // --- 2. DEEP LINK / BUTTON (Ultra-Minimalist) ---
+  // STRATEGY: Remove 'pn' (Name), 'mc' (Merchant Code), and 'mode'.
+  // We ONLY send the ID, Amount, and Reference.
+  // This is the bare minimum a UPI link needs to function.
   const deepLink = transactionRef 
-    ? `upi://pay?pa=${upiID}&pn=${encodeURIComponent(payeeName)}&tr=${transactionRef}&am=${amount}&cu=INR`
+    ? `upi://pay?pa=${upiID}&tr=${transactionRef}&am=${amount}&cu=INR`
     : "";
 
   const [copied, setCopied] = useState(false);
@@ -57,7 +53,6 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
     onVerify(cleanUTR).finally(() => setIsVerifying(false));
   };
 
-  // Prevent hydration mismatch
   if (!transactionRef) return null;
 
   return (
@@ -143,14 +138,7 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
               disabled={isVerifying}
               className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-black active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2"
             >
-              {isVerifying ? (
-                  <>
-                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                    <span>Verifying...</span>
-                  </>
-              ) : (
-                  "Verify & Complete"
-              )}
+              {isVerifying ? "Verifying..." : "Verify & Complete"}
             </button>
           </div>
         </div>
