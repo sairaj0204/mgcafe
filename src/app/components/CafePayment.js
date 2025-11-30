@@ -13,21 +13,20 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
   const [transactionRef, setTransactionRef] = useState("");
 
   useEffect(() => {
-    // Generate unique suffix for TR
+    // Generate unique TR for the QR Code (so Soundbox works on Scan)
     const uniqueSuffix = orderId ? orderId.slice(-4).toUpperCase() : Math.floor(Math.random() * 1000);
     setTransactionRef(`${staticRefPrefix}-${uniqueSuffix}`);
   }, [orderId]);
 
-  // --- 1. QR CODE LINK (Full Details) ---
+  // --- 1. QR CODE LINK (Rich Link) ---
+  // Keeps 'tr', 'mc', 'mode' so scanning triggers the Soundbox
   const qrLink = `upi://pay?pa=${upiID}&pn=${encodeURIComponent(payeeName)}&mc=${merchantCode}&tr=${transactionRef}&am=${amount}&cu=INR&mode=01`;
 
-  // --- 2. DEEP LINK / BUTTON (Ultra-Minimalist) ---
-  // STRATEGY: Remove 'pn' (Name), 'mc' (Merchant Code), and 'mode'.
-  // We ONLY send the ID, Amount, and Reference.
-  // This is the bare minimum a UPI link needs to function.
-  const deepLink = transactionRef 
-    ? `upi://pay?pa=${upiID}&tr=${transactionRef}&am=${amount}&cu=INR`
-    : "";
+  // --- 2. DEEP LINK / BUTTON (Bare Minimum Link) ---
+  // REMOVED: tr, mc, mode, tn
+  // KEPT: pa, pn, am, cu
+  // This is a standard P2P-style link.
+  const deepLink = `upi://pay?pa=${upiID}&pn=${encodeURIComponent(payeeName)}&am=${amount}&cu=INR`;
 
   const [copied, setCopied] = useState(false);
   const [utrInput, setUtrInput] = useState("");
@@ -53,6 +52,7 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
     onVerify(cleanUTR).finally(() => setIsVerifying(false));
   };
 
+  // Prevent hydration mismatch
   if (!transactionRef) return null;
 
   return (
@@ -138,7 +138,14 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
               disabled={isVerifying}
               className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-black active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2"
             >
-              {isVerifying ? "Verifying..." : "Verify & Complete"}
+              {isVerifying ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <span>Verifying...</span>
+                  </>
+              ) : (
+                  "Verify & Complete"
+              )}
             </button>
           </div>
         </div>
