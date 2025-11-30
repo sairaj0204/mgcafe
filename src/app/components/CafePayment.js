@@ -6,27 +6,27 @@ import { QRCodeSVG } from 'qrcode.react';
 const CafePayment = ({ amount, orderId, onVerify }) => {
   // --- CONFIGURATION ---
   const upiID = "ibkPOS.EP176726@icici";
-  const payeeName = "M/S.M G CAFE AND MOCKTAILS";
-  const merchantCode = "5812";
-  const staticRefPrefix = "EPYSSQREP176726";
+  const payeeName = "M/S.M G CAFE AND MOCKTAILS"; // Kept for QR visual only
+  const merchantCode = "5812"; // Kept for QR visual only
+  const staticRef = "EPYSSQREP176726";
 
   const [transactionRef, setTransactionRef] = useState("");
 
   useEffect(() => {
-    // Generate unique TR for the QR Code (so Soundbox works on Scan)
+    // For the QR Code (Scanning), we still use a unique suffix to be safe
+    // But for the BUTTON below, we will use the pure static ref as requested
     const uniqueSuffix = orderId ? orderId.slice(-4).toUpperCase() : Math.floor(Math.random() * 1000);
-    setTransactionRef(`${staticRefPrefix}-${uniqueSuffix}`);
+    setTransactionRef(`${staticRef}-${uniqueSuffix}`);
   }, [orderId]);
 
-  // --- 1. QR CODE LINK (Rich Link) ---
-  // Keeps 'tr', 'mc', 'mode' so scanning triggers the Soundbox
+  // --- 1. QR CODE LINK (Rich Link for Scanning) ---
+  // We keep this as-is because you confirmed it works perfectly with the Soundbox.
   const qrLink = `upi://pay?pa=${upiID}&pn=${encodeURIComponent(payeeName)}&mc=${merchantCode}&tr=${transactionRef}&am=${amount}&cu=INR&mode=01`;
 
-  // --- 2. DEEP LINK / BUTTON (Bare Minimum Link) ---
-  // REMOVED: tr, mc, mode, tn
-  // KEPT: pa, pn, am, cu
-  // This is a standard P2P-style link.
-  const deepLink = `upi://pay?pa=${upiID}&pn=${encodeURIComponent(payeeName)}&am=${amount}&cu=INR`;
+  // --- 2. DEEP LINK / BUTTON (The "Last Try" Experiment) ---
+  // EXACT REQUEST: pa + tr + am + cu. Nothing else.
+  // We use the PURE static reference 'EPYSSQREP176726' without modification.
+  const deepLink = `upi://pay?pa=${upiID}&tr=${staticRef}&am=${amount}&cu=INR`;
 
   const [copied, setCopied] = useState(false);
   const [utrInput, setUtrInput] = useState("");
@@ -83,7 +83,7 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
           </div>
         </div>
 
-        {/* TAP TO PAY BUTTON */}
+        {/* TAP TO PAY BUTTON (Minimalist) */}
         <a 
           href={deepLink}
           className="block w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold py-3.5 px-4 rounded-xl text-center shadow-lg shadow-blue-600/20 active:scale-95 transition-transform flex items-center justify-center gap-2"
