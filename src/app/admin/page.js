@@ -128,6 +128,13 @@ export default function AdminDashboard() {
                                         </div>
                                     ))}
                                 </div>
+                                {order.note && <p className="text-xs text-red-500 mt-2 font-bold bg-red-50 p-2 rounded">Note: {order.note}</p>}
+
+                                {/* 👇 ADDED TOTAL AMOUNT HERE */}
+                                <div className="mt-3 pt-2 border-t border-dashed border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                                    <span className="text-sm text-slate-500 font-medium">Total Bill:</span>
+                                    <span className="text-xl font-bold text-slate-900 dark:text-white">₹{order.totalAmount}</span>
+                                </div>
                             </div>
 
                             {/* BUTTONS COLUMN */}
