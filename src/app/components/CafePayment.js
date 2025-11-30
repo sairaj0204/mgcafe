@@ -8,17 +8,22 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
   const upiID = "ibkPOS.EP176726@icici";
   const payeeName = "M/S.M G CAFE AND MOCKTAILS";
   const merchantCode = "5812";
-  const staticBase = "EPYSSQREP176726";
   
-  // --- RANDOM SUFFIX LOGIC ---
+  // The full static reference from your physical QR
+  const originalStaticRef = "EPYSSQREP176726"; 
+  
   const [transactionRef, setTransactionRef] = useState("");
 
-  // Generate random ref only on client-side mount to avoid hydration mismatch
   useEffect(() => {
-    // Generates a random number between 1000 and 9999
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    setTransactionRef(`${staticBase}-${randomSuffix}`);
-  }, [staticBase]);
+    // LOGIC: Keep the first part, replace the last 4 digits.
+    // Original: EPYSSQREP176726
+    // New:      EPYSSQREP17xxxx (where x is random)
+    
+    const prefix = originalStaticRef.slice(0, -4); // Removes '6726'
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000); // Generates 4 random digits
+    
+    setTransactionRef(`${prefix}${randomSuffix}`);
+  }, []);
 
   // Construct the UPI Link
   const upiLink = `upi://pay?pa=${upiID}&pn=${encodeURIComponent(payeeName)}&mc=${merchantCode}&mode=00&tr=${transactionRef}&tn=Order_${orderId}&am=${amount}&cu=INR`;
@@ -55,7 +60,7 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
     onVerify(cleanUTR).finally(() => setIsVerifying(false));
   };
 
-  // Wait for client-side generation of random ID
+  // Prevent hydration mismatch by waiting for client-side ID generation
   if (!transactionRef) return null;
 
   return (
@@ -65,7 +70,8 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
       <div className="bg-slate-50 p-6 text-center border-b border-slate-100">
         <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Total Payable</p>
         <h2 className="text-3xl font-extrabold text-slate-800">₹{amount}</h2>
-        <p className="text-xs text-slate-400 mt-2 font-mono">Ref: {transactionRef.slice(-9)}</p>
+        {/* Displaying last 6 chars so you can visually verify it changes */}
+        <p className="text-xs text-slate-400 mt-2 font-mono">Ref: ...{transactionRef.slice(-6)}</p>
       </div>
 
       <div className="p-6 space-y-6">
