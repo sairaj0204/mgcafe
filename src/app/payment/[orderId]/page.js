@@ -5,7 +5,7 @@ import Navbar from '../../components/Navbar';
 import { useRouter } from 'next/navigation';
 
 export default function PaymentPage({ params }) {
-  // 1. Unwrap Params
+  // Unwrap params for Next.js 15
   const resolvedParams = use(params);
   const { orderId } = resolvedParams;
 
@@ -14,7 +14,7 @@ export default function PaymentPage({ params }) {
   const [error, setError] = useState(null);
   const router = useRouter();
 
-  // 2. Fetch Order Data
+  // 1. Fetch Order Data
   useEffect(() => {
     const fetchOrder = async () => {
       try {
@@ -35,6 +35,16 @@ export default function PaymentPage({ params }) {
     }
   }, [orderId]);
 
+  // 2. SUCCESS REDIRECT LOGIC
+  useEffect(() => {
+    if (order?.paymentStatus === 'paid') {
+        const timer = setTimeout(() => {
+            router.push('/myorders'); // Redirect to My Orders
+        }, 3000); // 3 second delay to read success message
+        return () => clearTimeout(timer);
+    }
+  }, [order?.paymentStatus, router]);
+
   // 3. Handle UTR Submission
   const handleVerifyPayment = async (utr) => {
     try {
@@ -47,7 +57,7 @@ export default function PaymentPage({ params }) {
       const data = await res.json();
 
       if (res.ok) {
-        // Update local state to show success screen immediately
+        // Update local state to trigger the Success UI and Redirect effect
         setOrder(prev => ({ ...prev, paymentStatus: 'paid' }));
       } else {
         alert("Error: " + data.error);
@@ -81,7 +91,7 @@ export default function PaymentPage({ params }) {
     );
   }
 
-  // === 4. SUCCESS STATE (If already paid) ===
+  // === SUCCESS STATE ===
   if (order.paymentStatus === 'paid') {
     return (
         <div className="min-h-screen bg-green-50 dark:bg-slate-950 flex flex-col items-center justify-center p-4">
@@ -94,7 +104,7 @@ export default function PaymentPage({ params }) {
                 
                 <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Payment Successful!</h1>
                 <p className="text-slate-500 dark:text-slate-400 mb-6">
-                    Your order for <strong>Table {order.tableNo}</strong> has been confirmed. The kitchen is preparing your food.
+                    Your order for <strong>Table {order.tableNo}</strong> has been confirmed.
                 </p>
 
                 <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl mb-6">
@@ -102,18 +112,13 @@ export default function PaymentPage({ params }) {
                     <p className="text-2xl font-mono font-bold text-slate-800 dark:text-white">₹{order.totalAmount}</p>
                 </div>
 
-                <button 
-                    onClick={() => router.push('/')}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-lg shadow-green-600/20"
-                >
-                    Back to Menu
-                </button>
+                <p className="text-sm text-slate-400 animate-pulse">Redirecting to your orders...</p>
             </div>
         </div>
     );
   }
 
-  // === 5. PENDING STATE (Show QR) ===
+  // === PENDING STATE ===
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <Navbar isLoggedIn={true} current="Payment" />
@@ -135,7 +140,6 @@ export default function PaymentPage({ params }) {
                  <p className="text-xs text-slate-400">
                     Your table number is <strong>{order.tableNo}</strong>
                  </p>
-                 <button onClick={() => router.push('/')} className="text-slate-500 hover:text-slate-800 text-sm font-medium transition-colors">Skip & Go to Home</button>
             </div>
         </div>
       </div>

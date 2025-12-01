@@ -1,66 +1,61 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 
 const CafePayment = ({ amount, orderId, onVerify }) => {
   // --- CONFIGURATION ---
   const upiID = "ibkPOS.EP176726@icici";
-  const payeeName = "M/S.M G CAFE AND MOCKTAILS"; // Kept for QR visual only
-  const merchantCode = "5812"; // Kept for QR visual only
-  const staticRef = "EPYSSQREP176726";
+  const payeeName = "M/S.M G CAFE AND MOCKTAILS";
+  const merchantCode = "5812";
+  
+  // FIX: Use the EXACT static reference from your physical QR.
+  // No suffixes, no random numbers. This ensures the Soundbox matches the ID.
+  const staticRef = "EPYSSQREP176726"; 
 
-  const [transactionRef, setTransactionRef] = useState("");
+  // --- QR CODE LINK ---
+  // 1. pa (Address)
+  // 2. pn (Name)
+  // 3. mc (Merchant Code - 5812 for Restaurants)
+  // 4. tr (Static Ref - EPYSSQREP176726)
+  // 5. am (Amount)
+  // 6. cu (INR)
+  // 7. mode (01 - QR Scan)
+  const qrLink = `upi://pay?pa=${upiID}&pn=${encodeURIComponent(payeeName)}&mc=${merchantCode}&tr=${staticRef}&am=${amount}&cu=INR&mode=01`;
 
-  useEffect(() => {
-    // For the QR Code (Scanning), we still use a unique suffix to be safe
-    // But for the BUTTON below, we will use the pure static ref as requested
-    const uniqueSuffix = orderId ? orderId.slice(-4).toUpperCase() : Math.floor(Math.random() * 1000);
-    setTransactionRef(`${staticRef}-${uniqueSuffix}`);
-  }, [orderId]);
-
-  // --- 1. QR CODE LINK (Rich Link for Scanning) ---
-  // We keep this as-is because you confirmed it works perfectly with the Soundbox.
-  const qrLink = `upi://pay?pa=${upiID}&pn=${encodeURIComponent(payeeName)}&mc=${merchantCode}&tr=${transactionRef}&am=${amount}&cu=INR&mode=01`;
-
-  // --- 2. DEEP LINK / BUTTON (The "Last Try" Experiment) ---
-  // EXACT REQUEST: pa + tr + am + cu. Nothing else.
-  // We use the PURE static reference 'EPYSSQREP176726' without modification.
-  const deepLink = `upi://pay?pa=${upiID}&tr=${staticRef}&am=${amount}&cu=INR`;
-
-  const [copied, setCopied] = useState(false);
   const [utrInput, setUtrInput] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const copyUPI = () => {
-    navigator.clipboard.writeText(upiID);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
+  // Manual Submit Handler
   const handleSubmit = () => {
     setErrorMessage(""); 
     const cleanUTR = utrInput.trim();
     
-    if (!cleanUTR || !/^\d{12}$/.test(cleanUTR)) {
-      setErrorMessage("Please enter the valid 12-digit UTR.");
+    // UPDATED VALIDATION: Allows 12 to 18 digits (Flexible)
+    if (!cleanUTR || cleanUTR.length < 12) {
+      setErrorMessage("Please enter a valid Reference/UTR number (min 12 digits).");
       return;
     }
 
-    setIsVerifying(true);
-    onVerify(cleanUTR).finally(() => setIsVerifying(false));
+    triggerVerification(cleanUTR);
   };
 
-  // Prevent hydration mismatch
-  if (!transactionRef) return null;
+  // Verification Logic
+  const triggerVerification = (utr) => {
+    if (isVerifying) return; // Prevent double submission
+    
+    setIsVerifying(true);
+    // This calls the parent page to update status to "paid" in DB
+    onVerify(utr).finally(() => setIsVerifying(false));
+  };
 
   return (
     <div className="w-full max-w-sm mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
       
       <div className="bg-slate-50 p-6 text-center border-b border-slate-100">
         <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Total Payable</p>
-        <h2 className="text-3xl font-extrabold text-slate-800">₹{amount}</h2>
+        <h2 className="text-4xl font-extrabold text-slate-800">₹{amount}</h2>
         <p className="text-xs text-slate-400 mt-2 font-mono">Order #{orderId?.slice(-6).toUpperCase()}</p>
       </div>
 
@@ -68,48 +63,37 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
         
         {/* QR CODE SECTION */}
         <div className="flex justify-center">
-          <div className="p-3 bg-white border-2 border-dashed border-orange-300 rounded-2xl shadow-sm relative">
-             <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-orange-500 rounded-tl-lg -mt-1 -ml-1"></div>
-             <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-orange-500 rounded-tr-lg -mt-1 -mr-1"></div>
-             <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-orange-500 rounded-bl-lg -mb-1 -ml-1"></div>
-             <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-orange-500 rounded-br-lg -mb-1 -mr-1"></div>
-             
+          <div className="p-4 bg-white border-2 border-slate-800 rounded-xl shadow-lg relative">
+             {/* Corner Accents */}
+             <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-slate-800 rounded-tl-lg -mt-1 -ml-1"></div>
+             <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-slate-800 rounded-tr-lg -mt-1 -mr-1"></div>
+             <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-slate-800 rounded-bl-lg -mb-1 -ml-1"></div>
+             <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-slate-800 rounded-br-lg -mb-1 -mr-1"></div>
+
              <QRCodeSVG 
                 value={qrLink} 
-                size={180}
+                size={220}
                 level={"M"} 
                 includeMargin={false}
               />
           </div>
         </div>
 
-        {/* TAP TO PAY BUTTON (Minimalist) */}
-        <a 
-          href={deepLink}
-          className="block w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold py-3.5 px-4 rounded-xl text-center shadow-lg shadow-blue-600/20 active:scale-95 transition-transform flex items-center justify-center gap-2"
-        >
-          <span>Tap to Pay via UPI App</span>
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
-        </a>
-
-        {/* MANUAL COPY SECTION */}
-        <div className="flex items-center gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
-            <div className="flex-1 min-w-0">
-                <p className="text-[10px] text-slate-400 uppercase font-bold">UPI ID</p>
-                <p className="text-sm font-mono font-medium text-slate-700 truncate">{upiID}</p>
-            </div>
-            <button 
-                onClick={copyUPI}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${copied ? "bg-green-100 text-green-700" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"}`}
-            >
-                {copied ? "Copied" : "Copy"}
-            </button>
+        {/* INSTRUCTIONS */}
+        <div className="bg-orange-50 border border-orange-100 p-4 rounded-xl text-center">
+            <p className="text-orange-800 font-bold text-sm mb-2 flex items-center justify-center gap-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path></svg>
+                Scan to Pay
+            </p>
+            <p className="text-xs text-orange-700 leading-relaxed">
+                Scan using <strong>another phone</strong> or take a <strong>Screenshot</strong> to upload in your UPI app.
+            </p>
         </div>
 
         {/* VERIFICATION INPUT SECTION */}
         <div className="border-t border-slate-100 pt-6">
           <label className="block text-sm font-bold text-slate-700 mb-2">
-            Confirm Payment
+            Enter UTR / Ref No.
           </label>
           <div className="space-y-3">
             <input 
@@ -117,25 +101,23 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
               inputMode="numeric" 
               pattern="[0-9]*"
               value={utrInput}
+              disabled={isVerifying}
               onChange={(e) => {
                   const val = e.target.value.replace(/\D/g, ''); 
                   setUtrInput(val);
                   setErrorMessage(""); 
               }}
-              placeholder="e.g. 324512345678"
-              className={`w-full border-2 rounded-xl px-4 py-3 text-lg font-mono tracking-widest focus:outline-none focus:ring-4 transition-all ${errorMessage ? "border-red-300 focus:border-red-500 focus:ring-red-500/20 bg-red-50" : "border-slate-200 focus:border-orange-500 focus:ring-orange-500/20 bg-slate-50"}`}
+              placeholder="Enter 12-digit UTR"
+              className={`w-full border-2 rounded-xl px-4 py-3 text-lg font-mono tracking-widest focus:outline-none focus:ring-4 transition-all ${errorMessage ? "border-red-300 focus:border-red-500 focus:ring-red-500/20 bg-red-50" : "border-slate-200 focus:border-blue-500 focus:ring-blue-500/20 bg-slate-50"} ${isVerifying ? "opacity-50 cursor-not-allowed" : ""}`}
             />
             
             {errorMessage && (
-                <p className="text-xs text-red-600 font-medium animate-pulse flex items-center gap-1">
-                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"></path></svg>
-                    {errorMessage}
-                </p>
+                <p className="text-xs text-red-600 font-bold animate-pulse">{errorMessage}</p>
             )}
 
             <button 
               onClick={handleSubmit}
-              disabled={isVerifying}
+              disabled={isVerifying || utrInput.length < 1}
               className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-black active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2"
             >
               {isVerifying ? (
@@ -144,7 +126,7 @@ const CafePayment = ({ amount, orderId, onVerify }) => {
                     <span>Verifying...</span>
                   </>
               ) : (
-                  "Verify & Complete"
+                  "Confirm Payment"
               )}
             </button>
           </div>
